@@ -87,7 +87,7 @@ class BiomassPatchDataset(Dataset):
 def load_metadata(csv_path: str) -> pd.DataFrame:
     metadata = pd.read_csv(csv_path)
     if "date" in metadata.columns:
-        metadata["date"] = pd.to_datetime(metadata["date"])
+        metadata["date"] = pd.to_datetime(metadata["date"], errors="coerce")
     if "image_path" not in metadata.columns:
         raise ValueError("metadata CSV must contain an 'image_path' column")
     return metadata

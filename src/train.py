@@ -17,9 +17,6 @@ from src.model import PatchFusionModel, get_loss_fn
 from src.utils import create_logger, prepare_experiment_dir, set_seed, tqdm
 
 
-DATE_COLUMN = "date"
-
-
 def collate_fn(batch: List[Dict[str, Any]]) -> Tuple[List[torch.Tensor], torch.Tensor]:
     patch_count = len(batch[0]["patches"])
     patch_batches = []
@@ -129,8 +126,6 @@ def main() -> None:
     )
 
     metadata = load_metadata(args.metadata)
-
-    print(f"[INFO] Loaded metadata with columns: {list(metadata.columns)}")
     required_cols = {"sample_id", "image_path", "Sampling_Date", "target_name", "target"}
     missing = required_cols - set(metadata.columns)
     if missing:
@@ -140,7 +135,21 @@ def main() -> None:
         "sample_id, image_path, Sampling_Date, State, Species, Pre_GSHH_NDVI, Height_Ave_cm, target_name, target"
     )
 
-    df = metadata.sort_values(DATE_COLUMN).reset_index(drop=True)
+    df = metadata.copy()
+    print(f"[INFO] Loaded metadata with columns: {list(df.columns)}")
+
+    if "date" not in df.columns:
+        if "Sampling_Date" in df.columns:
+            df = df.copy()
+            df["date"] = pd.to_datetime(df["Sampling_Date"])
+            print("[INFO] Created 'date' column from 'Sampling_Date'.")
+        else:
+            print("[WARN] No 'date' or 'Sampling_Date' column found. KFold will run without date sorting.")
+
+    if "date" in df.columns:
+        df = df.sort_values("date").reset_index(drop=True)
+    else:
+        df = df.reset_index(drop=True)
 
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     train_idx, valid_idx = list(kf.split(df))[args.fold]
@@ -150,6 +159,8 @@ def main() -> None:
 
     exp_dir = prepare_experiment_dir(config["experiment"]["save_dir"])
     logger = create_logger(exp_dir)
+
+    print("[Codex Update] Date column handling: Sampling_Date → date with fallback.")
 
     train_dataset = BiomassPatchDataset(
         train_df,
