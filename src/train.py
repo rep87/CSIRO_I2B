@@ -1,7 +1,9 @@
 import argparse
+import json
 import os
 from typing import Any, Dict, List, Tuple
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
@@ -13,6 +15,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 
 from src.dataset import BiomassPatchDataset, load_metadata
+from src.metrics import weighted_r2
 from src.model import PatchFusionModel, get_loss_fn
 from src.utils import create_logger, prepare_experiment_dir, set_seed, tqdm
 
@@ -89,9 +92,11 @@ def validate(
     loader: DataLoader,
     criterion: nn.Module,
     device: torch.device,
-) -> float:
+) -> Tuple[float, float]:
     model.eval()
     epoch_loss = 0.0
+    all_preds: List[torch.Tensor] = []
+    all_targets: List[torch.Tensor] = []
     progress = tqdm(loader, desc="Val", leave=False)
     with torch.no_grad():
         for patches, targets in progress:
@@ -101,7 +106,21 @@ def validate(
             loss = criterion(outputs, targets)
             epoch_loss += loss.item() * targets.size(0)
             progress.set_postfix(loss=loss.item())
-    return epoch_loss / len(loader.dataset)
+            all_preds.append(outputs.detach().cpu())
+            all_targets.append(targets.detach().cpu())
+
+    val_loss = epoch_loss / len(loader.dataset)
+
+    y_pred = torch.cat(all_preds, dim=0).numpy()
+    y_true = torch.cat(all_targets, dim=0).numpy()
+
+    y_pred_flat = y_pred.reshape(-1)
+    y_true_flat = y_true.reshape(-1)
+    weights = np.ones_like(y_true_flat, dtype=float)
+
+    val_metric = weighted_r2(y_true_flat, y_pred_flat, weights)
+
+    return val_loss, val_metric
 
 
 def main() -> None:
@@ -243,13 +262,27 @@ def main() -> None:
 
     best_val = float("inf")
     best_path = os.path.join(exp_dir, "best.ckpt")
+    history: List[Dict[str, Any]] = []
 
     for epoch in range(1, config["train"]["epochs"] + 1):
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, scaler, device)
-        val_loss = validate(model, val_loader, criterion, device)
+        val_loss, val_metric = validate(model, val_loader, criterion, device)
         scheduler.step()
 
-        logger.info(f"Epoch {epoch}/{config['train']['epochs']} - train_loss: {train_loss:.4f} - val_loss: {val_loss:.4f}")
+        logger.info(
+            f"Epoch {epoch}/{config['train']['epochs']} - "
+            f"train_loss: {train_loss:.4f} - val_loss: {val_loss:.4f} - val_metric: {val_metric:.4f}"
+        )
+
+        history.append(
+            {
+                "epoch": epoch,
+                "total_epochs": config["train"]["epochs"],
+                "train_loss": float(train_loss),
+                "val_loss": float(val_loss),
+                "val_metric": float(val_metric),
+            }
+        )
 
         torch.save(
             {
@@ -267,6 +300,20 @@ def main() -> None:
             logger.info(f"Saved best checkpoint to {best_path}")
 
     logger.info(f"Training complete. Best val loss: {best_val:.4f}")
+
+    metrics_json_path = os.path.join(exp_dir, "metrics.json")
+    with open(metrics_json_path, "w") as f:
+        json.dump(history, f, indent=2)
+
+    metrics_csv_path = os.path.join(exp_dir, "metrics.csv")
+    pd.DataFrame(history).to_csv(metrics_csv_path, index=False)
+
+    print(f"[INFO] Saved metrics to {metrics_json_path}")
+    print(f"[INFO] Saved metrics to {metrics_csv_path}")
+    print("[Codex Metrics Update]")
+    print("✔ Using weighted_r2 as validation metric (flattened over all targets).")
+    print("✔ Per-epoch train_loss, val_loss, val_metric saved to metrics.json and metrics.csv.")
+    print("✔ train.log line now includes val_metric per epoch.")
 
     print("[Codex NaN Fix]")
     print("✔ Filled NaN biomass targets with 0.0 in train dataframe.")
