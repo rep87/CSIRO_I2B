@@ -47,6 +47,11 @@ class PatchFusionModel(nn.Module):
         if isinstance(patches, torch.Tensor) and patches.dim() == 5:
             batch, patch, c, h, w = patches.shape
             patches = [patches[:, i] for i in range(patch)]
+        if len(patches) != self.patch_count:
+            raise ValueError(
+                f"Expected {self.patch_count} patches but received {len(patches)}. "
+                "Ensure model.patch_count in the config matches dataset patch generation."
+            )
         features: List[torch.Tensor] = []
         for patch in patches:
             feat = self.backbone(patch)

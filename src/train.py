@@ -109,6 +109,21 @@ def main() -> None:
     set_seed(42)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    patch_count = config["model"]["patch_count"]
+
+    print("조정 가능한 주요 설정 목록은 docs/FEATURE_TOGGLES.md 를 참고하세요.")
+    print(
+        "현재 설정: "
+        f"backbone={config['model']['backbone']}, "
+        f"patch_count={patch_count}, "
+        f"epochs={config['train']['epochs']}, "
+        f"batch_size={config['train']['batch_size']}, "
+        f"lr={config['train']['lr']}, "
+        f"optimizer={config['train']['optimizer']}, "
+        f"scheduler={config['train']['scheduler']}, "
+        f"loss={config['loss']['type']}"
+    )
+
     metadata = load_metadata(args.metadata)
 
     if args.cutoff_date:
@@ -123,7 +138,7 @@ def main() -> None:
     train_dataset = BiomassPatchDataset(
         train_df,
         image_dir=config["data"]["data_root"],
-        patch_count=config["model"]["patch_count"],
+        patch_count=patch_count,
         image_size=config["train"]["image_size"],
         augment_cfg=config["data"].get("augment", {}),
         is_train=True,
@@ -131,7 +146,7 @@ def main() -> None:
     val_dataset = BiomassPatchDataset(
         val_df,
         image_dir=config["data"]["data_root"],
-        patch_count=config["model"]["patch_count"],
+        patch_count=patch_count,
         image_size=config["train"]["image_size"],
         augment_cfg=config["data"].get("augment", {}),
         is_train=True,
@@ -156,7 +171,7 @@ def main() -> None:
 
     model = PatchFusionModel(
         backbone_name=config["model"]["backbone"],
-        patch_count=config["model"]["patch_count"],
+        patch_count=patch_count,
         pretrained=config["model"].get("pretrained", True),
     ).to(device)
 
