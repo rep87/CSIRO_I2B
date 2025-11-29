@@ -95,6 +95,19 @@
       data_root: "/data/biomass"
     ```
 
+- **메타데이터 날짜 스플릿**
+  - 동작 순서: `date` 컬럼이 있으면 그대로 사용 → 없으면 `Sampling_Date`를 `date`로 변환 → 둘 다 없으면 80/20 랜덤 스플릿으로 폴백합니다.
+  - Kaggle `train.csv` 스키마(필수): `sample_id`, `image_path`, `Sampling_Date`, `State`, `Species`, `Pre_GSHH_NDVI`, `Height_Ave_cm`, `target_name`, `target`
+  - 직접 가공 시 `Sampling_Date`를 유지하거나 `date`로 만들어 두면 시간 기반 스플릿이 안정적으로 동작합니다.
+  - 예시 코드:
+    ```python
+    import pandas as pd
+
+    df = pd.read_csv("train.csv")
+    df = df.rename(columns={"Sampling_Date": "date"})
+    df.to_csv("train_with_date.csv", index=False)
+    ```
+
 - **색상 변조 증강**
   - 설정 경로: `configs/train_config.yaml` → `data.augment.color_jitter`
   - 역할: ColorJitter 증강 사용 여부를 설정합니다.
