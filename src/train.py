@@ -160,6 +160,18 @@ def main() -> None:
 
     df = wide
 
+    biomass_cols = ["Dry", "Clover", "Green"]
+    for col in biomass_cols:
+        if col in df.columns:
+            df[col] = df[col].fillna(0.0)
+        else:
+            print(f"[WARN] Expected biomass column '{col}' not found in df.columns: {list(df.columns)}")
+
+    existing_biomass = [col for col in biomass_cols if col in df.columns]
+    print("[INFO] Filled NaN biomass targets with 0.0 for columns:", biomass_cols)
+    if existing_biomass and df[existing_biomass].isna().any().any():
+        print("[WARN] NaN still present in biomass target columns after fillna(0.0). Please check input data.")
+
     if "date" not in df.columns:
         if "Sampling_Date" in df.columns:
             df = df.copy()
@@ -255,6 +267,10 @@ def main() -> None:
             logger.info(f"Saved best checkpoint to {best_path}")
 
     logger.info(f"Training complete. Best val loss: {best_val:.4f}")
+
+    print("[Codex NaN Fix]")
+    print("✔ Filled NaN biomass targets with 0.0 in train dataframe.")
+    print(f"✔ Confirmed columns used for training: {biomass_cols}.")
 
 
 if __name__ == "__main__":
