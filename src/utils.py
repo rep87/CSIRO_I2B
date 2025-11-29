@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import re
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -87,7 +88,7 @@ def create_date_split(
         val_df = metadata.drop(train_df.index)
         return train_df.reset_index(drop=True), val_df.reset_index(drop=True)
 
-    metadata[date_column] = pd.to_datetime(metadata[date_column])
+    metadata[date_column] = pd.to_datetime(metadata[date_column], errors="coerce")
     cutoff_dt = pd.to_datetime(cutoff)
 
     for col in target_columns:
@@ -99,9 +100,30 @@ def create_date_split(
     return train_df, val_df
 
 
+def _get_next_run_dir(base_dir: str) -> str:
+    today = datetime.now().strftime("%Y%m%d")
+    pattern = re.compile(rf"^{today}_(\d+)$")
+
+    os.makedirs(base_dir, exist_ok=True)
+    existing = [
+        d
+        for d in os.listdir(base_dir)
+        if os.path.isdir(os.path.join(base_dir, d)) and pattern.match(d)
+    ]
+
+    if not existing:
+        next_idx = 1
+    else:
+        max_idx = max(int(pattern.match(d).group(1)) for d in existing)
+        next_idx = max_idx + 1
+
+    return f"{today}_{next_idx}"
+
+
 def prepare_experiment_dir(base_dir: str) -> str:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    exp_dir = os.path.join(base_dir, f"exp_{timestamp}")
+    run_dir_name = _get_next_run_dir(base_dir)
+    exp_dir = os.path.join(base_dir, run_dir_name)
     os.makedirs(exp_dir, exist_ok=True)
+    print("[Codex Update] Experiment dir naming: YYYYMMDD_N (incremental index).")
     return exp_dir
 
