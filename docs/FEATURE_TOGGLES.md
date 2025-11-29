@@ -95,18 +95,9 @@
       data_root: "/data/biomass"
     ```
 
-- **메타데이터 날짜 스플릿**
-  - 동작 순서: `date` 컬럼이 있으면 그대로 사용 → 없으면 `Sampling_Date`를 `date`로 변환 → 둘 다 없으면 80/20 랜덤 스플릿으로 폴백합니다.
-  - Kaggle `train.csv` 스키마(필수): `sample_id`, `image_path`, `Sampling_Date`, `State`, `Species`, `Pre_GSHH_NDVI`, `Height_Ave_cm`, `target_name`, `target`
-  - 직접 가공 시 `Sampling_Date`를 유지하거나 `date`로 만들어 두면 시간 기반 스플릿이 안정적으로 동작합니다.
-  - 예시 코드:
-    ```python
-    import pandas as pd
-
-    df = pd.read_csv("train.csv")
-    df = df.rename(columns={"Sampling_Date": "date"})
-    df.to_csv("train_with_date.csv", index=False)
-    ```
+- **메타데이터 처리/스플릿**
+  - Kaggle 원본 `train.csv`(long format: `target_name`, `target`)를 그대로 입력하면 `train.py`가 내부적으로 피벗하여 `Dry`, `Clover`, `Green` 타깃 컬럼을 생성합니다 (`Dry_Dead_g`→`Dry`, `Dry_Clover_g`→`Clover`, `Dry_Green_g`→`Green`). 별도의 Colab 전처리가 필요 없습니다.
+  - 날짜 처리 순서: `date` 컬럼이 있으면 그대로 사용 → 없으면 `Sampling_Date`에서 `date`를 생성 → 둘 다 없으면 날짜 정렬 없이 진행합니다. 이후 5-fold KFold(`--fold` 인자)로 학습/검증을 나눕니다.
 
 - **색상 변조 증강**
   - 설정 경로: `configs/train_config.yaml` → `data.augment.color_jitter`

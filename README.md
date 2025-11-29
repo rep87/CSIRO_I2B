@@ -42,10 +42,11 @@ Images are split into N equal patches (grid mapping: 1→1x1, 2→1x2, 4→2x2, 
 
 ## Training
 ```bash
-python -m src.train --config configs/train_config.yaml --metadata /path/to/meta.csv --cutoff_date 2023-06-01
+python -m src.train --config configs/train_config.yaml --metadata /path/to/train.csv --fold 0
 ```
+- Pass the original Kaggle `train.csv` (long format with `target_name` and `target`); `train.py` pivots it internally to `Dry`, `Clover`, and `Green` columns.
 - YAML is loaded for hyperparameters and augmentation.
-- Date-based split uses the `date` column when provided; otherwise an 80/20 split is applied.
+- 5-fold cross-validation is driven by `--fold`; rows are sorted by `date` if present or derived from `Sampling_Date` before splitting.
 - Mixed precision (AMP) and tqdm progress bars are enabled.
 - Checkpoints and logs are saved under a timestamped folder in `experiments/`.
 

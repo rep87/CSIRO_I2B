@@ -38,6 +38,12 @@ class BiomassPatchDataset(Dataset):
         self.image_size = image_size
         self.is_train = is_train
         self.target_columns = target_columns or ["Dry", "Clover", "Green"]
+        print("[INFO] Dataset columns:", list(self.metadata.columns))
+        for col in self.target_columns:
+            if col not in self.metadata.columns:
+                raise ValueError(
+                    f"Expected target column '{col}' not found in dataframe columns: {list(self.metadata.columns)}"
+                )
         self.transform = self._build_transform(augment_cfg or {})
 
     def _build_transform(self, augment_cfg: Dict) -> Callable:

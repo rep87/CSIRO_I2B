@@ -125,26 +125,48 @@ def main() -> None:
         f"loss={config['loss']['type']}"
     )
 
-    metadata = load_metadata(args.metadata)
+    df_raw = load_metadata(args.metadata)
     required_cols = {"sample_id", "image_path", "Sampling_Date", "target_name", "target"}
-    missing = required_cols - set(metadata.columns)
+    missing = required_cols - set(df_raw.columns)
     if missing:
         print(f"[WARN] Missing expected columns: {missing}")
     print(
         "[INFO] Please confirm that your train.csv matches Kaggle schema: "
         "sample_id, image_path, Sampling_Date, State, Species, Pre_GSHH_NDVI, Height_Ave_cm, target_name, target"
     )
+    print("[INFO] Raw train metadata columns:", list(df_raw.columns))
 
-    df = metadata.copy()
-    print(f"[INFO] Loaded metadata with columns: {list(df.columns)}")
+    wide = df_raw.pivot_table(
+        index=[
+            "sample_id",
+            "image_path",
+            "Sampling_Date",
+            "State",
+            "Species",
+            "Pre_GSHH_NDVI",
+            "Height_Ave_cm",
+        ],
+        columns="target_name",
+        values="target",
+    ).reset_index()
+    wide.columns = [c if not isinstance(c, tuple) else c[-1] for c in wide.columns]
+    rename_map = {
+        "Dry_Dead_g": "Dry",
+        "Dry_Clover_g": "Clover",
+        "Dry_Green_g": "Green",
+    }
+    wide = wide.rename(columns=rename_map)
+    print("[INFO] Wide train metadata columns:", list(wide.columns))
+
+    df = wide
 
     if "date" not in df.columns:
         if "Sampling_Date" in df.columns:
             df = df.copy()
             df["date"] = pd.to_datetime(df["Sampling_Date"])
-            print("[INFO] Created 'date' column from 'Sampling_Date'.")
+            print("[INFO] Created 'date' column from 'Sampling_Date' for CV.")
         else:
-            print("[WARN] No 'date' or 'Sampling_Date' column found. KFold will run without date sorting.")
+            print("[WARN] No 'date' or 'Sampling_Date' column found; CV will not use date ordering.")
 
     if "date" in df.columns:
         df = df.sort_values("date").reset_index(drop=True)
