@@ -7,13 +7,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import yaml
+from sklearn.model_selection import KFold
 from torch.cuda.amp import GradScaler, autocast
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 
 from src.dataset import BiomassPatchDataset, load_metadata
 from src.model import PatchFusionModel, get_loss_fn
-from src.utils import create_date_split, create_logger, prepare_experiment_dir, set_seed, tqdm
+from src.utils import create_logger, prepare_experiment_dir, set_seed, tqdm
 
 
 DATE_COLUMN = "date"
@@ -33,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train patch-based biomass regressor")
     parser.add_argument("--config", type=str, default="configs/train_config.yaml", help="Path to YAML config")
     parser.add_argument("--metadata", type=str, required=True, help="Path to metadata CSV")
-    parser.add_argument("--cutoff_date", type=str, default=None, help="Date used for train/val split")
+    parser.add_argument("--fold", type=int, default=0, choices=list(range(5)), help="Fold index for cross-validation")
     return parser.parse_args()
 
 
@@ -139,11 +140,13 @@ def main() -> None:
         "sample_id, image_path, Sampling_Date, State, Species, Pre_GSHH_NDVI, Height_Ave_cm, target_name, target"
     )
 
-    if args.cutoff_date:
-        train_df, val_df = create_date_split(metadata, DATE_COLUMN, args.cutoff_date, ["Dry", "Clover", "Green"])
-    else:
-        split_idx = int(0.8 * len(metadata))
-        train_df, val_df = metadata.iloc[:split_idx], metadata.iloc[split_idx:]
+    df = metadata.sort_values(DATE_COLUMN).reset_index(drop=True)
+
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    train_idx, valid_idx = list(kf.split(df))[args.fold]
+
+    train_df = df.iloc[train_idx].reset_index(drop=True)
+    val_df = df.iloc[valid_idx].reset_index(drop=True)
 
     exp_dir = prepare_experiment_dir(config["experiment"]["save_dir"])
     logger = create_logger(exp_dir)
