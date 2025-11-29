@@ -73,8 +73,23 @@ def create_date_split(
         train_df, val_df: Split DataFrames.
     """
     metadata = metadata.copy()
+
+    if date_column in metadata.columns:
+        print("[INFO] Using 'date' column for time-based split.")
+    elif "Sampling_Date" in metadata.columns:
+        print("[INFO] Detected 'Sampling_Date' and created 'date' column.")
+        metadata["date"] = pd.to_datetime(metadata["Sampling_Date"])
+        date_column = "date"
+    else:
+        print("[WARN] No 'date' or 'Sampling_Date' column found. Falling back to random split.")
+        print(f"[WARN] Available columns: {list(metadata.columns)}")
+        train_df = metadata.sample(frac=0.8, random_state=42)
+        val_df = metadata.drop(train_df.index)
+        return train_df.reset_index(drop=True), val_df.reset_index(drop=True)
+
     metadata[date_column] = pd.to_datetime(metadata[date_column])
     cutoff_dt = pd.to_datetime(cutoff)
+
     for col in target_columns:
         if col not in metadata.columns:
             metadata[col] = np.nan

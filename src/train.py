@@ -16,6 +16,9 @@ from src.model import PatchFusionModel, get_loss_fn
 from src.utils import create_date_split, create_logger, prepare_experiment_dir, set_seed, tqdm
 
 
+DATE_COLUMN = "date"
+
+
 def collate_fn(batch: List[Dict[str, Any]]) -> Tuple[List[torch.Tensor], torch.Tensor]:
     patch_count = len(batch[0]["patches"])
     patch_batches = []
@@ -126,8 +129,18 @@ def main() -> None:
 
     metadata = load_metadata(args.metadata)
 
+    print(f"[INFO] Loaded metadata with columns: {list(metadata.columns)}")
+    required_cols = {"sample_id", "image_path", "Sampling_Date", "target_name", "target"}
+    missing = required_cols - set(metadata.columns)
+    if missing:
+        print(f"[WARN] Missing expected columns: {missing}")
+    print(
+        "[INFO] Please confirm that your train.csv matches Kaggle schema: "
+        "sample_id, image_path, Sampling_Date, State, Species, Pre_GSHH_NDVI, Height_Ave_cm, target_name, target"
+    )
+
     if args.cutoff_date:
-        train_df, val_df = create_date_split(metadata, "date", args.cutoff_date, ["Dry", "Clover", "Green"])
+        train_df, val_df = create_date_split(metadata, DATE_COLUMN, args.cutoff_date, ["Dry", "Clover", "Green"])
     else:
         split_idx = int(0.8 * len(metadata))
         train_df, val_df = metadata.iloc[:split_idx], metadata.iloc[split_idx:]
