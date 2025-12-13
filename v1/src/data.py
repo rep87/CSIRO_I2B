@@ -43,7 +43,8 @@ class RegressionDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        img_path = os.path.join(self.image_root, row["image_path"])
+        # Resolve the image path once using the provided root and the CSV entry.
+        img_path = os.path.normpath(os.path.join(self.image_root, row["image_path"]))
         with Image.open(img_path) as img:
             image = img.convert("RGB")
         image = self.transform(image)
