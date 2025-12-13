@@ -4,7 +4,7 @@ Copy/paste individual sections into Colab cells to execute sequentially.
 """
 
 # === PATHS (edit in Colab) ===
-from v1.src.config import Config, PathConfig
+from src.config import Config, PathConfig
 
 paths = PathConfig(
     data_root="/content/drive/MyDrive/csiro-biomass",  # <-- change to your Drive path
@@ -48,11 +48,11 @@ cfg = Config(paths=paths, train=train_cfg, optuna=optuna_cfg)
 # === IMPORTS ===
 import os
 import pandas as pd
-from v1.src.data import load_long_dataframe, to_wide
-from v1.src.train import train_and_validate
-from v1.src.inference import run_inference
-from v1.src.optuna_search import run_optuna
-from v1.src.utils import set_seed
+from src.data import load_long_dataframe, to_wide
+from src.train import train_and_validate
+from src.inference import run_inference
+from src.optuna_search import run_optuna
+from src.utils import set_seed
 
 
 # === TRAINING + INFERENCE PIPELINE ===
