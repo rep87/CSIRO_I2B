@@ -10,6 +10,11 @@
 5. `python v1/colab_runner.py`를 실행하면 5-fold 학습 → 저장된 가중치로 추론 → `submission/submission.csv` 생성까지 진행합니다.
 6. Optuna 하이퍼파라미터 탐색을 사용하려면 CONFIG 블록의 `use_optuna=True`로 바꾸고 `n_trials`, `timeout_minutes`를 조정합니다.
 
+## Kaggle Notebook (단일 노트북 실행)
+- `kaggle_v1_monolithic.ipynb`를 Kaggle에 업로드한 뒤 Commit 후 Run하면 제출 파일이 생성됩니다.
+- 데이터 경로는 기본값 `/kaggle/input/csiro-biomass`를 사용하며 추가 설정이 필요 없습니다.
+- 결과물은 `/kaggle/working/submission.csv`와 `/kaggle/working/outputs/<run_name>/` 아래에 저장됩니다.
+
 ## 버전 운용 규칙
 - 루트에는 `v1/`, `v2/` … 버전 디렉토리를 둡니다. 큰 변경(아키텍처, 데이터 파이프라인, 스플릿, 손실, 추론 로직 등)은 새 버전을 만들어 추가하며 기존 버전은 그대로 보존합니다.
 - 사소한 변경(버그 수정, 로그/주석 개선)은 동일 버전 내에서 진행합니다.
