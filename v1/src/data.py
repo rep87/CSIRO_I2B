@@ -48,9 +48,11 @@ class RegressionDataset(Dataset):
             image = img.convert("RGB")
         image = self.transform(image)
 
-        targets = None
         if self.use_targets:
             targets = torch.tensor(row[self.target_cols].values.astype("float32"))
+        else:
+            # Use a dummy tensor instead of None to keep inference DataLoader collate happy
+            targets = torch.zeros(len(self.target_cols), dtype=torch.float32)
         return image, targets, row.get("sample_id_prefix", None)
 
 
