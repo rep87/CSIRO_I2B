@@ -48,7 +48,7 @@ cfg = Config(paths=paths, train=train_cfg, optuna=optuna_cfg)
 # === IMPORTS ===
 import os
 import pandas as pd
-from src.data import load_long_dataframe, to_wide
+from src.data import load_long_dataframe, to_wide, AGGREGATION_COLUMNS
 from src.train import train_and_validate
 from src.inference import run_inference
 from src.optuna_search import run_optuna
@@ -61,6 +61,10 @@ def main():
 
     train_long = load_long_dataframe(cfg.paths.resolve_train_csv())
     test_long = load_long_dataframe(cfg.paths.resolve_test_csv())
+
+    print("Train columns:", train_long.columns.tolist())
+    print("Test columns:", test_long.columns.tolist())
+    print("집계에 사용하는 컬럼 목록:", AGGREGATION_COLUMNS)
 
     train_wide = to_wide(train_long, include_targets=True)
     test_wide = to_wide(test_long, include_targets=False)
@@ -76,7 +80,7 @@ def main():
     score, run_dir = train_and_validate(train_wide, cfg)
     print(f"Finished CV with mean R2: {score:.4f}. Artifacts saved to {run_dir}")
 
-    submission_path = run_inference(test_wide, cfg, run_dir)
+    submission_path = run_inference(test_long, test_wide, cfg, run_dir)
     print("Submission saved to", submission_path)
 
 
