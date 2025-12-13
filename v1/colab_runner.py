@@ -17,7 +17,7 @@ paths = PathConfig(
 )
 
 # === CONFIG (edit in Colab) ===
-from v1.src.config import TrainConfig, OptunaConfig
+from src.config import TrainConfig, OptunaConfig
 
 train_cfg = TrainConfig(
     backbone="efficientnet_b2",
