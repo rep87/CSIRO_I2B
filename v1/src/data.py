@@ -9,6 +9,7 @@ import torchvision.transforms as T
 
 TARGET_COLUMNS = ["Dry_Green_g", "Dry_Clover_g", "Dry_Dead_g"]
 ALL_TARGET_COLUMNS = TARGET_COLUMNS + ["GDM_g", "Dry_Total_g"]
+AGGREGATION_COLUMNS = ["sample_id_prefix", "image_path"]
 
 
 class RegressionDataset(Dataset):
@@ -59,13 +60,27 @@ def load_long_dataframe(csv_path: str) -> pd.DataFrame:
     return df
 
 
+def _log_aggregation_columns(columns: List[str]):
+    print("Aggregation columns:", columns)
+
+
 def to_wide(df: pd.DataFrame, include_targets: bool = True) -> pd.DataFrame:
-    columns = ["sample_id_prefix", "image_path", "Sampling_Date", "State", "Species", "Pre_GSHH_NDVI", "Height_Ave_cm"]
+    index_cols = [col for col in AGGREGATION_COLUMNS if col in df.columns]
+    missing_index = [col for col in AGGREGATION_COLUMNS if col not in index_cols]
+    if missing_index:
+        raise ValueError(f"Missing required aggregation columns: {missing_index}")
+
+    _log_aggregation_columns(index_cols)
+
     if not include_targets:
-        return df[columns].drop_duplicates().reset_index(drop=True)
+        return df[index_cols].drop_duplicates().reset_index(drop=True)
+
+    for required in ["target_name", "target"]:
+        if required not in df.columns:
+            raise ValueError(f"Column '{required}' missing from dataframe used for aggregation")
 
     pivot_values = "target"
-    wide = df.pivot_table(index=columns, columns="target_name", values=pivot_values, aggfunc="first").reset_index()
+    wide = df.pivot_table(index=index_cols, columns="target_name", values=pivot_values, aggfunc="first").reset_index()
     missing = [c for c in TARGET_COLUMNS if c not in wide.columns]
     if missing:
         raise ValueError(f"Missing target columns after pivot: {missing}")
