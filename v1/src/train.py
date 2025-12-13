@@ -42,7 +42,7 @@ def train_and_validate(df, cfg: Config) -> Tuple[float, str]:
             df,
             train_idx.tolist(),
             val_idx.tolist(),
-            image_root=cfg.paths.resolve_train_dir(),
+            image_root=cfg.paths.resolve_image_root(),
             image_size=cfg.train.image_size,
             batch_size=cfg.train.batch_size,
             num_workers=cfg.train.num_workers,

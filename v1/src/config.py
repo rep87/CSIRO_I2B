@@ -1,5 +1,6 @@
+import os
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Optional
 
 
 @dataclass
@@ -7,22 +8,26 @@ class PathConfig:
     data_root: str = "/content/drive/MyDrive/csiro-biomass"
     train_csv: str = "train.csv"
     test_csv: str = "test.csv"
-    train_dir: str = "train"
-    test_dir: str = "test"
     output_root: str = "./outputs"
     run_name: Optional[str] = None
+    train_dir: Optional[str] = None
+    test_dir: Optional[str] = None
 
     def resolve_train_csv(self) -> str:
-        return f"{self.data_root}/{self.train_csv}"
+        return os.path.join(self.data_root, self.train_csv)
 
     def resolve_test_csv(self) -> str:
-        return f"{self.data_root}/{self.test_csv}"
+        return os.path.join(self.data_root, self.test_csv)
 
     def resolve_train_dir(self) -> str:
-        return f"{self.data_root}/{self.train_dir}"
+        return self.data_root
 
     def resolve_test_dir(self) -> str:
-        return f"{self.data_root}/{self.test_dir}"
+        return self.data_root
+
+    def resolve_image_root(self) -> str:
+        """Base directory used to resolve image_path entries in the CSV files."""
+        return self.data_root
 
 
 @dataclass
