@@ -8,3 +8,8 @@
 - 손실 함수는 `SmoothL1Loss`, 평가 지표는 5개 타깃에 대한 weighted R²이며, optimizer는 AdamW + ReduceLROnPlateau 조합입니다.
 - `DEBUG` 토글로 소량 샘플/1 epoch 실행이 가능하고, `USE_OPTUNA` 토글로 간단한 하이퍼파라미터 탐색을 선택적으로 수행할 수 있습니다.
 - 산출물은 `outputs/<run_name>/` 아래에 fold별 체크포인트, 로그, 제출 파일이 저장되며, `submission/submission.csv`는 Kaggle 제출 규격을 따릅니다.
+
+## Kaggle 제출용 실행 방법
+- Kaggle Notebook에서 데이터셋 `csiro-biomass`를 추가한 뒤, 런타임에 `!python v1/kaggle_runner.py` 한 줄만 실행합니다.
+- 출력은 `/kaggle/working/outputs/<run_name>/`와 `/kaggle/working/submission.csv`에 저장됩니다.
+- `DEBUG=1`, `RUN_NAME=myrun` 같은 환경 변수를 전달해 빠른 점검이나 실행 이름을 지정할 수 있습니다.

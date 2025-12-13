@@ -64,15 +64,24 @@ def run_inference(test_long_df: pd.DataFrame, test_wide_df: pd.DataFrame, cfg: C
 
     submission = pd.read_csv(submission_path)
     print("Submission shape:", submission.shape)
+    print("Submission columns:", submission.columns.tolist())
     print("NaN present:", submission["target"].isna().any())
 
     sample_submission_path = os.path.join(cfg.paths.data_root, "sample_submission.csv")
     if os.path.exists(sample_submission_path):
         sample_sub = pd.read_csv(sample_submission_path)
-        missing_ids = set(sample_sub["sample_id"]) - set(submission["sample_id"])
+        sample_ids = set(sample_sub["sample_id"])
+        submission_ids = set(submission["sample_id"])
+        missing_ids = sample_ids - submission_ids
+        extra_ids = submission_ids - sample_ids
         if missing_ids:
             print("Warning: missing sample_ids compared to sample_submission:", len(missing_ids))
         else:
             print("Submission covers all sample_ids from sample_submission.csv")
+        if extra_ids:
+            print("Warning: submission has extra sample_ids not in sample_submission:", len(extra_ids))
+        else:
+            print("No extra sample_ids beyond sample_submission.csv")
 
+    print("Submission saved to", submission_path)
     return submission_path
