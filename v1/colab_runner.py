@@ -10,8 +10,6 @@ paths = PathConfig(
     data_root="/content/drive/MyDrive/csiro-biomass",  # <-- change to your Drive path
     train_csv="train.csv",
     test_csv="test.csv",
-    train_dir="train",
-    test_dir="test",
     output_root="./outputs",
     run_name=None,  # optional custom name
 )

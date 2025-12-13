@@ -35,7 +35,9 @@ def build_submission(test_long_df: pd.DataFrame, test_wide_df: pd.DataFrame, pre
 
 def run_inference(test_long_df: pd.DataFrame, test_wide_df: pd.DataFrame, cfg: Config, run_dir: str) -> str:
     device = torch.device(cfg.device if torch.cuda.is_available() else "cpu")
-    ds = RegressionDataset(test_wide_df, cfg.paths.resolve_test_dir(), cfg.train.image_size, augment=False, use_targets=False)
+    ds = RegressionDataset(
+        test_wide_df, cfg.paths.resolve_image_root(), cfg.train.image_size, augment=False, use_targets=False
+    )
     loader = DataLoader(ds, batch_size=cfg.train.batch_size, shuffle=False, num_workers=cfg.train.num_workers, pin_memory=True)
 
     checkpoints = sorted([p for p in os.listdir(os.path.join(run_dir, "checkpoints")) if p.endswith("_best.pth")])
