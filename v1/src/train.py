@@ -1,10 +1,13 @@
+import json
 import os
+from dataclasses import asdict
+from datetime import datetime, timezone, timedelta
 from typing import List, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.cuda.amp import GradScaler, autocast
+from torch.cuda.amp import GradScaler
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
@@ -31,12 +34,20 @@ def train_and_validate(df, cfg: Config) -> Tuple[float, str]:
     indices = np.arange(num_samples)
 
     best_scores: List[float] = []
+    fold_details: List[dict] = []
+    per_fold_counts: List[dict] = []
     for fold in range(cfg.train.folds):
         logger.info("=== Fold %d / %d ===", fold + 1, cfg.train.folds)
         val_start = fold * fold_size
         val_end = (fold + 1) * fold_size if fold < cfg.train.folds - 1 else num_samples
         val_idx = indices[val_start:val_end]
         train_idx = np.concatenate([indices[:val_start], indices[val_end:]])
+
+        per_fold_counts.append({
+            "fold": fold,
+            "train_samples": int(len(train_idx)),
+            "val_samples": int(len(val_idx)),
+        })
 
         train_loader, val_loader = create_dataloaders(
             df,
@@ -56,6 +67,7 @@ def train_and_validate(df, cfg: Config) -> Tuple[float, str]:
         scaler = GradScaler(enabled=cfg.train.amp)
 
         best_fold_score = -np.inf
+        best_epoch = None
         best_path = os.path.join(run_dir, "checkpoints", f"fold{fold}_best.pth")
         last_path = os.path.join(run_dir, "checkpoints", f"fold{fold}_last.pth")
 
@@ -68,7 +80,8 @@ def train_and_validate(df, cfg: Config) -> Tuple[float, str]:
                 images = images.to(device)
                 targets = targets.to(device)
 
-                with autocast(enabled=cfg.train.amp):
+                autocast_enabled = cfg.train.amp and device.type == "cuda"
+                with torch.amp.autocast(device_type=device.type, enabled=autocast_enabled):
                     preds = model(images)
                     loss = criterion(preds, targets)
                     loss = loss / cfg.train.accumulate_steps
@@ -90,10 +103,95 @@ def train_and_validate(df, cfg: Config) -> Tuple[float, str]:
             torch.save(model.state_dict(), last_path)
             if val_score > best_fold_score:
                 best_fold_score = val_score
+                best_epoch = epoch + 1
                 torch.save(model.state_dict(), best_path)
         best_scores.append(best_fold_score)
+        fold_details.append({
+            "fold": fold,
+            "best_metric": float(best_fold_score),
+            "best_epoch": int(best_epoch) if best_epoch is not None else None,
+            "best_checkpoint": best_path,
+        })
     mean_score = float(np.mean(best_scores))
     logger.info("CV mean R2: %.4f", mean_score)
+
+    run_timestamp_utc = datetime.now(timezone.utc)
+    run_timestamp_kst = run_timestamp_utc.astimezone(timezone(timedelta(hours=9)))
+
+    summary = {
+        "run": {
+            "timestamp_utc": run_timestamp_utc.isoformat(),
+            "timestamp_utc_plus_9": run_timestamp_kst.isoformat(),
+            "run_directory": run_dir,
+        },
+        "device": {
+            "target": cfg.device,
+            "actual": device.type,
+            "torch_version": torch.__version__,
+            "cuda_available": torch.cuda.is_available(),
+            "cuda_version": torch.version.cuda,
+            "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        },
+        "config": asdict(cfg),
+        "data": {
+            "split_strategy": "contiguous k-fold (no shuffle)",
+            "num_folds": cfg.train.folds,
+            "seed": cfg.train.seed,
+            "total_samples": num_samples,
+            "per_fold_counts": per_fold_counts,
+        },
+        "model": {
+            "backbone": cfg.train.backbone,
+            "pretrained": True,
+            "image_size": cfg.train.image_size,
+            "in_chans": 3,
+            "head": {
+                "type": "timm default",
+                "out_features": len(TARGET_COLUMNS),
+            },
+        },
+        "training": {
+            "batch_size": cfg.train.batch_size,
+            "epochs": cfg.train.epochs,
+            "learning_rate": cfg.train.lr,
+            "optimizer": "AdamW",
+            "weight_decay": cfg.train.weight_decay,
+            "scheduler": {
+                "type": "ReduceLROnPlateau",
+                "mode": "max",
+                "factor": 0.5,
+                "patience": cfg.train.patience,
+            },
+            "warmup": None,
+            "grad_accumulation_steps": cfg.train.accumulate_steps,
+            "amp": cfg.train.amp,
+            "loss": "SmoothL1Loss",
+            "clip_grad": None,
+            "ema": False,
+        },
+        "evaluation": {
+            "metric": "val_weighted_r2",
+            "folds": fold_details,
+        },
+        "overall": {
+            "cv_mean_best_metric": mean_score,
+            "oof_metric": None,
+            "checkpoint_selection": {
+                "strategy": "per-fold best checkpoint",
+                "paths": [detail["best_checkpoint"] for detail in fold_details],
+            },
+        },
+    }
+
+    outputs_dir = "/content/CSIRO_I2B/v1/outputs"
+    os.makedirs(outputs_dir, exist_ok=True)
+    summary_path = os.path.join(outputs_dir, f"run_summary_{run_timestamp_utc.strftime('%Y%m%dT%H%M%SZ')}.json")
+    with open(summary_path, "w") as f:
+        json.dump(summary, f, indent=2)
+
+    logger.info("=== RUN SUMMARY ===")
+    logger.info(json.dumps(summary, indent=2))
+    logger.info("Run summary saved to %s", summary_path)
     return mean_score, run_dir
 
 
