@@ -9,6 +9,11 @@
 - `DEBUG` 토글로 소량 샘플/1 epoch 실행이 가능하고, `USE_OPTUNA` 토글로 간단한 하이퍼파라미터 탐색을 선택적으로 수행할 수 있습니다.
 - 산출물은 `outputs/<run_name>/` 아래에 fold별 체크포인트, 로그, 제출 파일이 저장되며, `submission/submission.csv`는 Kaggle 제출 규격을 따릅니다.
 
+## 모델 및 이미지 기법
+- **모델**: EfficientNet-B2(`pretrained=False`) 기반 회귀 모델로 Dry_Green_g, Dry_Clover_g, Dry_Dead_g 세 타깃을 직접 예측한 뒤, 추론 단계에서 GDM_g와 Dry_Total_g를 계산합니다.
+- **이미지 기법**: 이미지를 정사각형으로 리사이즈한 후 `RandomHorizontalFlip`, `RandomVerticalFlip`, `ColorJitter`를 학습 시에 적용합니다. 추가 메타데이터 없이 순수 이미지 입력만 사용합니다.
+- **추론 파이프라인**: 학습된 가중치(fold별 `_best.pth`)를 불러와 테스트 이미지에 대해 예측하고, `sample_id_prefix`를 활용해 long-format 제출 파일을 생성합니다.
+
 ## Kaggle 제출용 실행 방법
 - Kaggle Notebook에서 데이터셋 `csiro-biomass`를 추가한 뒤, 런타임에 `!python v1/kaggle_runner.py` 한 줄만 실행합니다.
 - 출력은 `/kaggle/working/outputs/<run_name>/`와 `/kaggle/working/submission.csv`에 저장됩니다.
