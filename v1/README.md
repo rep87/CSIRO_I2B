@@ -18,3 +18,9 @@
 - Kaggle Notebook에서 데이터셋 `csiro-biomass`를 추가한 뒤, 런타임에 `!python v1/kaggle_runner.py` 한 줄만 실행합니다.
 - 출력은 `/kaggle/working/outputs/<run_name>/`와 `/kaggle/working/submission.csv`에 저장됩니다.
 - `DEBUG=1`, `RUN_NAME=myrun` 같은 환경 변수를 전달해 빠른 점검이나 실행 이름을 지정할 수 있습니다.
+
+## Flattened Kaggle submission (inference-only)
+- `v1/kaggle_submit_flat.ipynb`는 **Kaggle 제출 전용(flattened, inference-only) 노트북**으로, v1/src의 추론 로직을 코드 셀 안에 그대로 인라인했습니다. 외부 `.py` 임포트나 `__file__` 없이 오프라인에서도 동작합니다.
+- **모델 백본 및 이미지 설정**: EfficientNet-B2(`pretrained=False`), `image_size=456`, `batch_size=32`, `num_workers=2`를 사용합니다. 추론에서는 리사이즈 + 정규화만 적용하며 학습용 증강은 없습니다.
+- **타깃 구성**: 세 개 1차 타깃(`Dry_Green_g`, `Dry_Clover_g`, `Dry_Dead_g`)을 직접 예측하고, 추론 중 `GDM_g = Dry_Green_g + Dry_Clover_g`, `Dry_Total_g = GDM_g + Dry_Dead_g`를 산출해 최종 다섯 개 타깃을 제출합니다.
+- **가중치 로딩**: 노트북 상단의 `WEIGHTS_ROOT`를 Kaggle에 첨부한 가중치 데이터셋 경로(예: `/kaggle/input/<your-weights-dataset>/v1_weights`)로 교체한 뒤 실행하면 fold별 `*_best.pth` 다섯 개를 평균 앙상블하여 `submission.csv`를 생성합니다.
