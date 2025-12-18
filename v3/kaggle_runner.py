@@ -10,7 +10,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from v3.src.config import Config, PathConfig, TrainConfig, TuningConfig, TuningFastDevConfig
+from v3.src.config import Config, PathConfig, RuntimeConfig, TrainConfig, TuningConfig, TuningFastDevConfig
 from v3.src.data import AGGREGATION_COLUMNS, load_long_dataframe, to_wide
 from v3.src.inference import run_inference
 from v3.src.train import run_training
@@ -59,7 +59,11 @@ tuning_cfg = TuningConfig(
     fast_dev=TuningFastDevConfig(enabled=True, epochs=5, batch_size_override=None, folds_subset=2),
 )
 
-cfg = Config(paths=paths, train=train_cfg, tuning=tuning_cfg)
+runtime_cfg = RuntimeConfig(
+    use_optuna=tuning_flag,
+    use_fulltrain=True,
+)
+cfg = Config(paths=paths, train=train_cfg, tuning=tuning_cfg, runtime=runtime_cfg)
 
 
 def main():
@@ -76,13 +80,22 @@ def main():
     test_wide = to_wide(test_long, include_targets=False)
 
     training_result = run_training(train_wide, cfg)
-    if cfg.tuning.enabled:
+    if training_result["tuning_ran"]:
         print("Optuna best params:", training_result["tuning_best_params"])
         print("Optuna best score:", training_result["tuning_best_score"])
-    print(f"Finished CV with mean R2: {training_result['cv_mean_best_metric']:.4f}. Artifacts saved to {training_result['run_dir']}")
 
-    submission_path = run_inference(test_long, test_wide, cfg, training_result["run_dir"])
-    print("Submission saved to", submission_path)
+    if training_result["fulltrain_ran"]:
+        print(
+            f"Finished CV with mean R2: {training_result['cv_mean_best_metric']:.4f}. "
+            f"Artifacts saved to {training_result['run_dir']}"
+        )
+        submission_path = run_inference(test_long, test_wide, cfg, training_result["run_dir"])
+        print("Submission saved to", submission_path)
+    else:
+        print("Full training was skipped (runtime.use_fulltrain=False).")
+        print("Outputs folder:", training_result["run_dir"])
+
+    print("Final config saved to", training_result["final_cfg_path"])
 
 
 if __name__ == "__main__":

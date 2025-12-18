@@ -14,7 +14,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 # === PATHS (edit in Colab) ===
-from v3.src.config import Config, PathConfig
+from v3.src.config import Config, PathConfig, RuntimeConfig
 
 paths = PathConfig(
     data_root="/content/drive/MyDrive/csiro-biomass",  # <-- change to your Drive path
@@ -26,6 +26,7 @@ paths = PathConfig(
 
 # === CONFIG (edit in Colab) ===
 from v3.src.config import TrainConfig, TuningConfig, TuningFastDevConfig
+from v3.src.utils import apply_dotpath_overrides
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
@@ -73,7 +74,11 @@ tuning_cfg = TuningConfig(
     ),
 )
 
-cfg = Config(paths=paths, train=train_cfg, tuning=tuning_cfg)
+runtime_cfg = RuntimeConfig(
+    use_optuna=tuning_flag,
+    use_fulltrain=_env_flag("USE_FULLTRAIN", default="1"),
+)
+cfg = Config(paths=paths, train=train_cfg, tuning=tuning_cfg, runtime=runtime_cfg)
 
 
 def _apply_overrides(cfg_obj):
@@ -92,26 +97,7 @@ def _apply_overrides(cfg_obj):
         logger.warning("Failed to parse CSIRO_OVERRIDE_CFG: %s", exc)
         return
 
-    for key, value in overrides.items():
-        parts = key.split(".")
-        target = cfg_obj
-        valid_path = True
-        for part in parts[:-1]:
-            if hasattr(target, part):
-                target = getattr(target, part)
-            else:
-                logger.warning("CSIRO_OVERRIDE_CFG ignored unknown path segment '%s' in key '%s'", part, key)
-                valid_path = False
-                break
-        if not valid_path:
-            continue
-
-        leaf = parts[-1]
-        if hasattr(target, leaf):
-            setattr(target, leaf, value)
-            logger.info("Override applied: %s=%s", key, value)
-        else:
-            logger.warning("CSIRO_OVERRIDE_CFG ignored unknown leaf '%s' in key '%s'", leaf, key)
+    apply_dotpath_overrides(cfg_obj, overrides, logger)
 
 
 _apply_overrides(cfg)
@@ -143,13 +129,22 @@ def main():
         test_wide = test_wide.head(8)
 
     training_result = run_training(train_wide, cfg)
-    if cfg.tuning.enabled:
+    if training_result["tuning_ran"]:
         print("Optuna best params:", training_result["tuning_best_params"])
         print("Optuna best score:", training_result["tuning_best_score"])
-    print(f"Finished CV with mean R2: {training_result['cv_mean_best_metric']:.4f}. Artifacts saved to {training_result['run_dir']}")
 
-    submission_path = run_inference(test_long, test_wide, cfg, training_result["run_dir"])
-    print("Submission saved to", submission_path)
+    if training_result["fulltrain_ran"]:
+        print(
+            f"Finished CV with mean R2: {training_result['cv_mean_best_metric']:.4f}. "
+            f"Artifacts saved to {training_result['run_dir']}"
+        )
+        submission_path = run_inference(test_long, test_wide, cfg, training_result["run_dir"])
+        print("Submission saved to", submission_path)
+    else:
+        print("Full training was skipped (runtime.use_fulltrain=False).")
+        print("Outputs folder:", training_result["run_dir"])
+
+    print("Final config saved to", training_result["final_cfg_path"])
 
 
 if __name__ == "__main__":

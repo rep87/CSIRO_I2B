@@ -89,10 +89,17 @@ class TuningConfig:
 
 
 @dataclass
+class RuntimeConfig:
+    use_optuna: bool = False
+    use_fulltrain: bool = True
+
+
+@dataclass
 class Config:
     paths: PathConfig = field(default_factory=PathConfig)
     train: TrainConfig = field(default_factory=TrainConfig)
     tuning: TuningConfig = field(default_factory=TuningConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     device: str = "cuda"
 
     def adjust_for_debug(self):

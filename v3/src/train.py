@@ -124,6 +124,34 @@ def _build_scheduler(cfg: Config, optimizer):
     return scheduler, step_fn
 
 
+def _save_final_config(base_run_dir: str, cfg: Config) -> str:
+    final_cfg_to_save = copy.deepcopy(cfg)
+    final_cfg_to_save.adjust_for_debug()
+    final_cfg_path = os.path.join(base_run_dir, "final_cfg.json")
+    with open(final_cfg_path, "w") as f:
+        json.dump(asdict(final_cfg_to_save), f, indent=2)
+
+    logger.info(
+        (
+            "[Final Training Config] epochs=%s folds=%s lr=%s weight_decay=%s scheduler=%s image_size=%s "
+            "crop_bottom=%s use_clahe=%s cv_split_strategy=%s use_optuna=%s use_fulltrain=%s"
+        ),
+        final_cfg_to_save.train.epochs,
+        final_cfg_to_save.train.folds,
+        final_cfg_to_save.train.lr,
+        final_cfg_to_save.train.weight_decay,
+        final_cfg_to_save.train.scheduler,
+        final_cfg_to_save.train.image_size,
+        final_cfg_to_save.train.crop_bottom,
+        final_cfg_to_save.train.use_clahe,
+        final_cfg_to_save.train.cv_split_strategy,
+        final_cfg_to_save.runtime.use_optuna,
+        final_cfg_to_save.runtime.use_fulltrain,
+    )
+    logger.info("Final config saved to %s", final_cfg_path)
+    return final_cfg_path
+
+
 def train_and_validate(
     df,
     cfg: Config,
@@ -332,28 +360,42 @@ def evaluate(model, loader, device) -> float:
 def run_training(train_df, cfg: Config):
     """
     Orchestrate the full training workflow:
-      1) Optional Optuna tuning with fast_dev overrides.
-      2) Save best params/score to optuna_best.json when tuning is enabled.
-      3) Run final full-fold training with the best (or original) config.
+      1) Optional Optuna tuning with fast_dev overrides (controlled by runtime.use_optuna).
+      2) Save best params/score to optuna_best.json when tuning runs.
+      3) Save final_cfg.json after applying overrides/best params.
+      4) Optionally run full training (controlled by runtime.use_fulltrain).
     """
+    logging.basicConfig(level=logging.INFO)
     _resolve_run_name(cfg)
     outputs_root = os.path.abspath(cfg.paths.output_root)
     base_run_dir = os.path.join(outputs_root, cfg.paths.run_name)
     os.makedirs(base_run_dir, exist_ok=True)
 
+    use_optuna = bool(cfg.runtime.use_optuna and cfg.tuning.enabled)
+    use_fulltrain = bool(cfg.runtime.use_fulltrain)
+
+    if cfg.runtime.use_optuna and not cfg.tuning.enabled:
+        logger.warning("runtime.use_optuna is True but tuning.enabled is False; skipping tuning.")
+    if not use_optuna and not use_fulltrain:
+        logger.warning("Both runtime.use_optuna and runtime.use_fulltrain are False. Only saving final config.")
+
     tuning_best_params = None
     tuning_best_score = None
+    tuning_ran = False
     final_cfg = cfg
 
-    if cfg.tuning.enabled:
+    if use_optuna:
         from .optuna_search import run_optuna_search
 
+        tuning_ran = True
         tuning_result = run_optuna_search(train_df, cfg, base_run_dir)
         tuning_best_params = tuning_result["best_params"]
         tuning_best_score = tuning_result["best_score"]
         final_cfg = tuning_result["best_cfg"]
         cfg.train = final_cfg.train
         cfg.paths = final_cfg.paths
+        cfg.tuning = final_cfg.tuning
+        cfg.runtime = final_cfg.runtime
 
         best_record = {
             "best_params": tuning_best_params,
@@ -367,37 +409,30 @@ def run_training(train_df, cfg: Config):
         with open(best_path, "w") as f:
             json.dump(best_record, f, indent=2)
 
-    logging.basicConfig(level=logging.INFO)
-    final_cfg_to_save = copy.deepcopy(final_cfg)
-    final_cfg_to_save.adjust_for_debug()
-    final_cfg_path = os.path.join(base_run_dir, "final_cfg.json")
-    with open(final_cfg_path, "w") as f:
-        json.dump(asdict(final_cfg_to_save), f, indent=2)
+    final_cfg_path = _save_final_config(base_run_dir, final_cfg)
 
-    logger.info(
-        "[Final Training Config] epochs=%s lr=%s weight_decay=%s image_size=%s crop_bottom=%s use_clahe=%s cv_split_strategy=%s tuning.enabled=%s",
-        final_cfg_to_save.train.epochs,
-        final_cfg_to_save.train.lr,
-        final_cfg_to_save.train.weight_decay,
-        final_cfg_to_save.train.image_size,
-        final_cfg_to_save.train.crop_bottom,
-        final_cfg_to_save.train.use_clahe,
-        final_cfg_to_save.train.cv_split_strategy,
-        final_cfg_to_save.tuning.enabled,
-    )
-    logger.info("Final config saved to %s", final_cfg_path)
+    fulltrain_ran = False
+    final_score = None
+    final_run_dir = base_run_dir
 
-    final_score, final_run_dir = train_and_validate(
-        train_df,
-        final_cfg,
-        run_dir=base_run_dir,
-        save_checkpoints=True,
-        log_summary=True,
-    )
+    if use_fulltrain:
+        final_score, final_run_dir = train_and_validate(
+            train_df,
+            final_cfg,
+            run_dir=base_run_dir,
+            save_checkpoints=True,
+            log_summary=True,
+        )
+        fulltrain_ran = True
+    else:
+        logger.info("Skipping full training because runtime.use_fulltrain is False.")
 
     return {
         "tuning_best_params": tuning_best_params,
         "tuning_best_score": tuning_best_score,
         "cv_mean_best_metric": final_score,
         "run_dir": final_run_dir,
+        "final_cfg_path": final_cfg_path,
+        "fulltrain_ran": fulltrain_ran,
+        "tuning_ran": tuning_ran,
     }

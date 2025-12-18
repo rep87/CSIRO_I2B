@@ -58,6 +58,36 @@ def log_config(logger: logging.Logger, cfg: Any) -> None:
     logger.info("Configuration: %s", content)
 
 
+def apply_dotpath_overrides(cfg_obj: Any, overrides: Dict[str, Any], logger: logging.Logger) -> None:
+    """Apply overrides like {"tuning.enabled": False} to a dataclass config.
+
+    Unknown paths are ignored with a warning and do not interrupt execution.
+    """
+
+    for key, value in overrides.items():
+        parts = key.split(".")
+        target = cfg_obj
+        valid_path = True
+
+        for part in parts[:-1]:
+            if hasattr(target, part):
+                target = getattr(target, part)
+            else:
+                logger.warning("CSIRO_OVERRIDE_CFG ignored unknown path segment '%s' in key '%s'", part, key)
+                valid_path = False
+                break
+
+        if not valid_path:
+            continue
+
+        leaf = parts[-1]
+        if hasattr(target, leaf):
+            setattr(target, leaf, value)
+            logger.info("Override applied: %s=%s", key, value)
+        else:
+            logger.warning("CSIRO_OVERRIDE_CFG ignored unknown leaf '%s' in key '%s'", leaf, key)
+
+
 def time_block(logger: logging.Logger, label: str):
     start = time.time()
 
