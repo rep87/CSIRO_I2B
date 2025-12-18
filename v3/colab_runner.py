@@ -3,6 +3,8 @@ Colab-friendly runner script for CSIRO Image2Biomass v3.
 Copy/paste individual sections into Colab cells to execute sequentially.
 """
 
+import json
+import logging
 import os
 import sys
 
@@ -24,6 +26,10 @@ paths = PathConfig(
 
 # === CONFIG (edit in Colab) ===
 from v3.src.config import TrainConfig, TuningConfig, TuningFastDevConfig
+
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    return os.environ.get(name, default).lower() in {"1", "true", "yes"}
 
 train_cfg = TrainConfig(
     backbone="efficientnet_b2",
@@ -48,8 +54,8 @@ train_cfg = TrainConfig(
     use_clahe=True,
 )
 
-# Enable/disable tuning via environment variable (TUNING=1) or by editing enabled below.
-tuning_flag = os.environ.get("TUNING", "0") == "1"
+# Enable/disable tuning via environment variable (TUNING=1 / USE_OPTUNA=true) or by editing enabled below.
+tuning_flag = _env_flag("TUNING") or _env_flag("USE_OPTUNA")
 tuning_cfg = TuningConfig(
     enabled=tuning_flag,
     n_trials=20,
@@ -68,6 +74,47 @@ tuning_cfg = TuningConfig(
 )
 
 cfg = Config(paths=paths, train=train_cfg, tuning=tuning_cfg)
+
+
+def _apply_overrides(cfg_obj):
+    override_raw = os.environ.get("CSIRO_OVERRIDE_CFG")
+    if not override_raw:
+        return
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
+    try:
+        overrides = json.loads(override_raw)
+        if not isinstance(overrides, dict):
+            raise ValueError("Override must be a JSON object")
+    except Exception as exc:  # pragma: no cover - env parsing path
+        logger.warning("Failed to parse CSIRO_OVERRIDE_CFG: %s", exc)
+        return
+
+    for key, value in overrides.items():
+        parts = key.split(".")
+        target = cfg_obj
+        valid_path = True
+        for part in parts[:-1]:
+            if hasattr(target, part):
+                target = getattr(target, part)
+            else:
+                logger.warning("CSIRO_OVERRIDE_CFG ignored unknown path segment '%s' in key '%s'", part, key)
+                valid_path = False
+                break
+        if not valid_path:
+            continue
+
+        leaf = parts[-1]
+        if hasattr(target, leaf):
+            setattr(target, leaf, value)
+            logger.info("Override applied: %s=%s", key, value)
+        else:
+            logger.warning("CSIRO_OVERRIDE_CFG ignored unknown leaf '%s' in key '%s'", leaf, key)
+
+
+_apply_overrides(cfg)
 
 # === IMPORTS ===
 import pandas as pd

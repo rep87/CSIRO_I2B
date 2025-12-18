@@ -4,6 +4,8 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Tuple
+import copy
+import logging
 
 import numpy as np
 import torch
@@ -19,6 +21,8 @@ from .data import TARGET_COLUMNS, create_dataloaders
 from .metrics import compute_weighted_r2, expand_targets
 from .model import build_model
 from .utils import create_run_dir, set_seed, setup_logger
+
+logger = logging.getLogger(__name__)
 
 
 def _ensure_run_dir(run_dir: str, save_checkpoints: bool) -> str:
@@ -362,6 +366,26 @@ def run_training(train_df, cfg: Config):
         best_path = os.path.join(base_run_dir, "optuna_best.json")
         with open(best_path, "w") as f:
             json.dump(best_record, f, indent=2)
+
+    logging.basicConfig(level=logging.INFO)
+    final_cfg_to_save = copy.deepcopy(final_cfg)
+    final_cfg_to_save.adjust_for_debug()
+    final_cfg_path = os.path.join(base_run_dir, "final_cfg.json")
+    with open(final_cfg_path, "w") as f:
+        json.dump(asdict(final_cfg_to_save), f, indent=2)
+
+    logger.info(
+        "[Final Training Config] epochs=%s lr=%s weight_decay=%s image_size=%s crop_bottom=%s use_clahe=%s cv_split_strategy=%s tuning.enabled=%s",
+        final_cfg_to_save.train.epochs,
+        final_cfg_to_save.train.lr,
+        final_cfg_to_save.train.weight_decay,
+        final_cfg_to_save.train.image_size,
+        final_cfg_to_save.train.crop_bottom,
+        final_cfg_to_save.train.use_clahe,
+        final_cfg_to_save.train.cv_split_strategy,
+        final_cfg_to_save.tuning.enabled,
+    )
+    logger.info("Final config saved to %s", final_cfg_path)
 
     final_score, final_run_dir = train_and_validate(
         train_df,
