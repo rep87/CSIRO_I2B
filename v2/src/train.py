@@ -34,25 +34,44 @@ def train_and_validate(df, cfg: Config) -> Tuple[float, str]:
     indices = np.arange(num_samples)
     logger.info("CV split strategy: %s", cfg.train.cv_split_strategy)
 
-    def _prepare_groups():
+    def _validate_required_columns(train_wide_df):
+        required = []
+        if cfg.train.cv_split_strategy in ["group_date", "group_date_state"]:
+            required.append("Sampling_Date")
+        if cfg.train.cv_split_strategy in ["group_state", "group_date_state"]:
+            required.append("State")
+
+        missing_required = [c for c in required if c not in train_wide_df.columns]
+        if missing_required:
+            logger.error(
+                "train_wide missing required columns for %s: %s",
+                cfg.train.cv_split_strategy,
+                missing_required,
+            )
+            logger.error("train_wide columns: %s", list(train_wide_df.columns))
+            raise ValueError(f"Missing columns after pivot/merge: {missing_required}")
+
+    def _prepare_groups(train_wide_df):
+        _validate_required_columns(train_wide_df)
+
         if cfg.train.cv_split_strategy == "group_date":
             key = "Sampling_Date"
-            if key not in df.columns:
-                logger.error("Sampling_Date column missing for group_date split")
-                raise ValueError("Sampling_Date column missing for group_date split")
-            groups = df[key].astype(str).tolist()
+            if key not in train_wide_df.columns:
+                logger.error("Sampling_Date column missing in train_wide for group_date split")
+                raise ValueError("Sampling_Date column missing in train_wide for group_date split")
+            groups = train_wide_df[key].astype(str).tolist()
         elif cfg.train.cv_split_strategy == "group_state":
             key = "State"
-            if key not in df.columns:
-                logger.error("State column missing for group_state split")
-                raise ValueError("State column missing for group_state split")
-            groups = df[key].astype(str).tolist()
+            if key not in train_wide_df.columns:
+                logger.error("State column missing in train_wide for group_state split")
+                raise ValueError("State column missing in train_wide for group_state split")
+            groups = train_wide_df[key].astype(str).tolist()
         elif cfg.train.cv_split_strategy == "group_date_state":
-            missing = [c for c in ["Sampling_Date", "State"] if c not in df.columns]
+            missing = [c for c in ["Sampling_Date", "State"] if c not in train_wide_df.columns]
             if missing:
-                logger.error("Columns missing for group_date_state split: %s", missing)
-                raise ValueError(f"Missing columns for group_date_state split: {missing}")
-            groups = (df["Sampling_Date"].astype(str) + "_" + df["State"].astype(str)).tolist()
+                logger.error("Columns missing in train_wide for group_date_state split: %s", missing)
+                raise ValueError(f"Missing columns for group_date_state split in train_wide: {missing}")
+            groups = (train_wide_df["Sampling_Date"].astype(str) + "_" + train_wide_df["State"].astype(str)).tolist()
         else:
             raise ValueError(f"Unsupported cv_split_strategy: {cfg.train.cv_split_strategy}")
 
@@ -71,7 +90,7 @@ def train_and_validate(df, cfg: Config) -> Tuple[float, str]:
             train_idx = np.concatenate([indices[:val_start], indices[val_end:]])
             split_indices.append((train_idx, val_idx))
     else:
-        groups = _prepare_groups()
+        groups = _prepare_groups(df)
         splitter = GroupKFold(n_splits=cfg.train.folds)
         split_indices = list(splitter.split(df, groups=groups))
 
