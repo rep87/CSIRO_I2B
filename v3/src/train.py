@@ -1,10 +1,10 @@
-import json
 import os
 import time
 from dataclasses import asdict
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Tuple
 import copy
+import json
 import logging
 
 import numpy as np
@@ -20,7 +20,13 @@ from .config import Config
 from .data import TARGET_COLUMNS, create_dataloaders
 from .metrics import compute_weighted_r2, expand_targets
 from .model import build_model
-from .utils import create_run_dir, set_seed, setup_logger
+from .utils import (
+    create_run_dir,
+    resolve_output_root,
+    save_json,
+    set_seed,
+    setup_logger,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +134,8 @@ def _save_final_config(base_run_dir: str, cfg: Config) -> str:
     final_cfg_to_save = copy.deepcopy(cfg)
     final_cfg_to_save.adjust_for_debug()
     final_cfg_path = os.path.join(base_run_dir, "final_cfg.json")
-    with open(final_cfg_path, "w") as f:
-        json.dump(asdict(final_cfg_to_save), f, indent=2)
+
+    save_json(final_cfg_path, asdict(final_cfg_to_save), logger)
 
     logger.info(
         (
@@ -256,6 +262,13 @@ def train_and_validate(
             "best_epoch": int(best_epoch) if best_epoch is not None else None,
             "best_checkpoint": best_path if save_checkpoints else None,
         })
+
+        cv_summary = {
+            "folds": fold_details,
+            "mean_best_metric": float(np.mean(best_scores)) if best_scores else None,
+            "std_best_metric": float(np.std(best_scores)) if len(best_scores) > 1 else 0.0,
+        }
+        save_json(os.path.join(run_dir, "cv_summary.json"), cv_summary, logger)
     mean_score = float(np.mean(best_scores))
     logger.info("CV mean R2: %.4f", mean_score)
 
@@ -329,8 +342,7 @@ def train_and_validate(
 
     if log_summary:
         summary_path = os.path.join(run_dir, f"run_summary_{run_timestamp_utc.strftime('%Y%m%dT%H%M%SZ')}.json")
-        with open(summary_path, "w") as f:
-            json.dump(summary, f, indent=2)
+        save_json(summary_path, summary, logger)
 
         logger.info("=== RUN SUMMARY ===")
         logger.info(json.dumps(summary, indent=2))
@@ -367,9 +379,21 @@ def run_training(train_df, cfg: Config):
     """
     logging.basicConfig(level=logging.INFO)
     _resolve_run_name(cfg)
-    outputs_root = os.path.abspath(cfg.paths.output_root)
+    outputs_root = resolve_output_root(cfg.paths.output_root, logger)
+    cfg.paths.output_root = outputs_root
     base_run_dir = os.path.join(outputs_root, cfg.paths.run_name)
-    os.makedirs(base_run_dir, exist_ok=True)
+    try:
+        os.makedirs(base_run_dir, exist_ok=True)
+    except Exception as exc:  # pragma: no cover - filesystem safety path
+        logger.warning(
+            "Failed to create base run dir %s (%s). Falling back to local outputs.",
+            base_run_dir,
+            exc,
+        )
+        outputs_root = resolve_output_root("outputs", logger)
+        cfg.paths.output_root = outputs_root
+        base_run_dir = os.path.join(outputs_root, cfg.paths.run_name)
+        os.makedirs(base_run_dir, exist_ok=True)
 
     use_optuna = bool(cfg.runtime.use_optuna and cfg.tuning.enabled)
     use_fulltrain = bool(cfg.runtime.use_fulltrain)
@@ -404,10 +428,10 @@ def run_training(train_df, cfg: Config):
             "n_trials": cfg.tuning.n_trials,
             "direction": cfg.tuning.direction,
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "top_trials": tuning_result.get("top_trials"),
         }
         best_path = os.path.join(base_run_dir, "optuna_best.json")
-        with open(best_path, "w") as f:
-            json.dump(best_record, f, indent=2)
+        save_json(best_path, best_record, logger)
 
     final_cfg_path = _save_final_config(base_run_dir, final_cfg)
 

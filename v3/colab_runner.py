@@ -16,11 +16,19 @@ if PROJECT_ROOT not in sys.path:
 # === PATHS (edit in Colab) ===
 from v3.src.config import Config, PathConfig, RuntimeConfig
 
+output_root_env = os.environ.get("CSIRO_OUTPUT_ROOT", "outputs")
+try:
+    os.makedirs(output_root_env, exist_ok=True)
+except Exception as exc:  # pragma: no cover - filesystem safety path for Colab
+    print(f"[WARN] Failed to create output root {output_root_env}: {exc}. Falling back to ./outputs")
+    output_root_env = "outputs"
+    os.makedirs(output_root_env, exist_ok=True)
+
 paths = PathConfig(
     data_root="/content/drive/MyDrive/csiro-biomass",  # <-- change to your Drive path
     train_csv="train.csv",
     test_csv="test.csv",
-    output_root="./outputs",
+    output_root=output_root_env,
     run_name=None,  # optional custom name
 )
 
