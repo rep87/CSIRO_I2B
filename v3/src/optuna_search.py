@@ -76,7 +76,7 @@ def _objective(trial: optuna.Trial, df, base_cfg: Config, base_run_dir: str, bas
             "number": trial.number,
             "params": params,
             "value": score,
-            "state": trial.state.name,
+            "state": "RUNNING",
         },
         logger,
     )
