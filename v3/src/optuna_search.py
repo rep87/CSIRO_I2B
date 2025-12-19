@@ -1,11 +1,15 @@
 import copy
+import logging
 import os
-from typing import Dict
+from typing import Dict, List
 
 import optuna
 
 from .config import Config
 from .train import _resolve_run_name, train_and_validate
+from .utils import append_jsonl, save_json
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_trial_params_to_cfg(cfg: Config, params: Dict) -> Config:
@@ -66,6 +70,17 @@ def _objective(trial: optuna.Trial, df, base_cfg: Config, base_run_dir: str, bas
         trial.set_user_attr("exception", str(exc))
         raise
 
+    append_jsonl(
+        os.path.join(base_run_dir, "optuna_trials.jsonl"),
+        {
+            "number": trial.number,
+            "params": params,
+            "value": score,
+            "state": trial.state.name,
+        },
+        logger,
+    )
+
     return score
 
 
@@ -79,6 +94,18 @@ def _build_pruner(cfg: Config):
     if cfg.tuning.pruner == "none":
         return optuna.pruners.NopPruner()
     return optuna.pruners.MedianPruner()
+
+
+def _top_trials(study: optuna.Study, k: int = 3) -> List[dict]:
+    ordered = sorted(
+        [t for t in study.trials if t.value is not None],
+        key=lambda t: t.value,
+        reverse=study.direction == optuna.study.StudyDirection.MAXIMIZE,
+    )
+    return [
+        {"number": t.number, "value": t.value, "params": t.params}
+        for t in ordered[:k]
+    ]
 
 
 def run_optuna_search(df, cfg: Config, base_run_dir: str):
@@ -104,9 +131,21 @@ def run_optuna_search(df, cfg: Config, base_run_dir: str):
     best_cfg = _apply_trial_params_to_cfg(copy.deepcopy(cfg), study.best_trial.params)
     best_cfg.paths.run_name = base_run_name
 
+    save_json(
+        os.path.join(base_run_dir, "optuna_best.json"),
+        {
+            "best_params": study.best_trial.params,
+            "best_score": study.best_value,
+            "direction": cfg.tuning.direction,
+            "top_trials": _top_trials(study),
+        },
+        logger,
+    )
+
     return {
         "study": study,
         "best_params": study.best_trial.params,
         "best_score": study.best_value,
         "best_cfg": best_cfg,
+        "top_trials": _top_trials(study),
     }
